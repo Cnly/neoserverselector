@@ -29,12 +29,22 @@ func copyForever(from, to *net.TCPConn, bufferLen int, ctx context.Context, canc
 				return
 			default:
 			}
+
 			if err != io.EOF {
 				log.Printf("error reading from TCPConn (addr: %s, err: %v)", from.RemoteAddr(), err)
 			}
 			cancelFunc()
-			from.Close()
-			to.Close()
+
+			err = from.Close()
+			if err != nil {
+				log.Printf("error closing src TCPConn (addr: %s, err: %v)", from.RemoteAddr(), err)
+			}
+
+			err = to.Close()
+			if err != nil {
+				log.Printf("error closing dst TCPConn (addr: %s, err: %v)", from.RemoteAddr(), err)
+			}
+
 			return
 		}
 		_, err = to.Write(buf[:n])
@@ -44,12 +54,22 @@ func copyForever(from, to *net.TCPConn, bufferLen int, ctx context.Context, canc
 				return
 			default:
 			}
+
 			if err != io.EOF {
 				log.Printf("error writing to TCPConn (addr: %s, err: %v)", to.RemoteAddr(), err)
 			}
 			cancelFunc()
-			from.Close()
-			to.Close()
+
+			err = from.Close()
+			if err != nil {
+				log.Printf("error closing src TCPConn (addr: %s, err: %v)", from.RemoteAddr(), err)
+			}
+
+			err = to.Close()
+			if err != nil {
+				log.Printf("error closing dst TCPConn (addr: %s, err: %v)", from.RemoteAddr(), err)
+			}
+
 			return
 		}
 	}
@@ -131,7 +151,10 @@ func main() {
 
 							withMutex(mutex, func() {
 								if stopNewConns {
-									remoteConn.Close()
+									err = remoteConn.Close()
+									if err != nil {
+										log.Printf("error closing remote TCPConn (addr: %s, err: %v)", remoteConn.RemoteAddr(), err)
+									}
 									return
 								} else {
 									log.Printf("successfully connected to remote %s (%s)", serverAddr, time.Since(startTime).Round(time.Millisecond))
