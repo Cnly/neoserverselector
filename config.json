@@ -1,0 +1,10 @@
+{
+	"BindAddrs": [
+		"127.0.0.1:5201"
+	],
+	"BufferLen": 65000,
+	"DialTimeoutMilliSeconds": 7000,
+	"Servers": [
+		"127.0.0.2"
+	]
+}
