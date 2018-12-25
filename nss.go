@@ -157,7 +157,7 @@ func main() {
 									}
 									return
 								} else {
-									log.Printf("successfully connected to remote %s (%s)", serverAddr, time.Since(startTime).Round(time.Millisecond))
+									log.Printf("successfully connected to remote %s (%d ms)", serverAddr, time.Since(startTime).Nanoseconds()/1000/1000)
 									ch <- remoteConn.(*net.TCPConn)
 									stopNewConns = true
 								}
