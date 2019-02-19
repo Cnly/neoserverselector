@@ -144,19 +144,22 @@ func main() {
 							startTime := time.Now()
 							serverAddr := serverIP + ":" + strconv.Itoa(port)
 							remoteConn, err := net.DialTimeout("tcp", serverAddr, dialTimeout)
-							if err != nil {
-								log.Printf("error establishing connection to remote (%s, %v)", serverAddr, err)
-								return
-							}
 
 							withMutex(mutex, func() {
 								if stopNewConns {
-									err = remoteConn.Close()
-									if err != nil {
-										log.Printf("error closing remote TCPConn (addr: %s, err: %v)", remoteConn.RemoteAddr(), err)
+									if remoteConn != nil {
+										err = remoteConn.Close()
+										if err != nil {
+											log.Printf("error closing remote TCPConn (addr: %s, err: %v)", remoteConn.RemoteAddr(), err)
+										}
 									}
 									return
 								} else {
+									if err != nil {
+										log.Printf("error establishing connection to remote (%s, %v)", serverAddr, err)
+										return
+									}
+
 									log.Printf("successfully connected to remote %s (%d ms)", serverAddr, time.Since(startTime).Nanoseconds()/1000/1000)
 									ch <- remoteConn.(*net.TCPConn)
 									stopNewConns = true
