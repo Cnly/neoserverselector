@@ -12,14 +12,15 @@ import (
 	"time"
 )
 
-type ConfigJson struct {
+// ConfigJSON represents the config for nss
+type ConfigJSON struct {
 	BindAddrs               []string
 	BufferLen               int
 	DialTimeoutMilliSeconds int64
 	Servers                 []string
 }
 
-func copyForever(from, to *net.TCPConn, bufferLen int, ctx context.Context, cancelFunc context.CancelFunc) {
+func copyForever(ctx context.Context, cancelFunc context.CancelFunc, from, to *net.TCPConn, bufferLen int) {
 	buf := make([]byte, bufferLen)
 	for {
 		n, err := from.Read(buf)
@@ -88,14 +89,14 @@ func main() {
 		log.Fatalf("error parsing config file (%v)", err)
 	}
 
-	configJson := ConfigJson{}
-	err = json.Unmarshal(b, &configJson)
+	configJSON := ConfigJSON{}
+	err = json.Unmarshal(b, &configJSON)
 	if err != nil {
 		log.Fatalf("error parsing config file as json (%v)", err)
 	}
 
-	serverIPs := make([]string, len(configJson.Servers))
-	for i, serverIP := range configJson.Servers {
+	serverIPs := make([]string, len(configJSON.Servers))
+	for i, serverIP := range configJSON.Servers {
 		ip := net.ParseIP(serverIP)
 		if ip == nil {
 			log.Fatalf("error parsing server IP %s", serverIP)
@@ -103,12 +104,12 @@ func main() {
 		serverIPs[i] = serverIP
 	}
 
-	dialTimeout := time.Duration(configJson.DialTimeoutMilliSeconds) * time.Millisecond
+	dialTimeout := time.Duration(configJSON.DialTimeoutMilliSeconds) * time.Millisecond
 
-	bufferLen := configJson.BufferLen
+	bufferLen := configJSON.BufferLen
 	bgctx := context.Background()
 
-	for _, bindAddr := range configJson.BindAddrs {
+	for _, bindAddr := range configJSON.BindAddrs {
 		addr, err := net.ResolveTCPAddr("tcp", bindAddr)
 		if err != nil {
 			log.Fatalf("error parsing binding address (%s, %v)", bindAddr, err)
@@ -122,7 +123,7 @@ func main() {
 		log.Printf("listening on %s", bindAddr)
 
 		port := addr.Port
-		go func(ln *net.TCPListener) {
+		go func(ln *net.TCPListener, bindAddr string) {
 			// Create acceptor for each TCPListener
 
 			for {
@@ -154,16 +155,16 @@ func main() {
 										}
 									}
 									return
-								} else {
-									if err != nil {
-										log.Printf("error establishing connection to remote (%s, %v)", serverAddr, err)
-										return
-									}
-
-									log.Printf("successfully connected to remote %s (%d ms)", serverAddr, time.Since(startTime).Nanoseconds()/1000/1000)
-									ch <- remoteConn.(*net.TCPConn)
-									stopNewConns = true
 								}
+
+								if err != nil {
+									log.Printf("error establishing connection to remote (%s, %v)", serverAddr, err)
+									return
+								}
+
+								log.Printf("successfully connected to remote %s (%d ms)", serverAddr, time.Since(startTime).Nanoseconds()/1000/1000)
+								ch <- remoteConn.(*net.TCPConn)
+								stopNewConns = true
 							})
 						}(serverIP)
 					}
@@ -171,12 +172,12 @@ func main() {
 					// Create pipeline
 					remoteConn := <-ch
 					pipeCtx, pipeCancel := context.WithCancel(bgctx)
-					go copyForever(conn, remoteConn, bufferLen, pipeCtx, pipeCancel)
-					go copyForever(remoteConn, conn, bufferLen, pipeCtx, pipeCancel)
+					go copyForever(pipeCtx, pipeCancel, conn, remoteConn, bufferLen)
+					go copyForever(pipeCtx, pipeCancel, remoteConn, conn, bufferLen)
 
 				}()
 			}
-		}(ln)
+		}(ln, bindAddr)
 	}
 
 	<-bgctx.Done()
