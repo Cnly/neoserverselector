@@ -7,14 +7,13 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"strconv"
 	"sync"
 	"time"
 )
 
-// ConfigJSON represents the config for nss
-type ConfigJSON struct {
-	BindAddrs               []string
+// ConfigObject represents one config object specified in config
+type ConfigObject struct {
+	BindAddr                string
 	BufferLen               int
 	DialTimeoutMilliSeconds int64
 	Servers                 []string
@@ -89,47 +88,38 @@ func main() {
 		log.Fatalf("error parsing config file (%v)", err)
 	}
 
-	configJSON := ConfigJSON{}
-	err = json.Unmarshal(b, &configJSON)
+	var configObjects []ConfigObject
+	err = json.Unmarshal(b, &configObjects)
 	if err != nil {
 		log.Fatalf("error parsing config file as json (%v)", err)
 	}
 
-	serverIPs := make([]string, len(configJSON.Servers))
-	for i, serverIP := range configJSON.Servers {
-		ip := net.ParseIP(serverIP)
-		if ip == nil {
-			log.Fatalf("error parsing server IP %s", serverIP)
-		}
-		serverIPs[i] = serverIP
-	}
-
-	dialTimeout := time.Duration(configJSON.DialTimeoutMilliSeconds) * time.Millisecond
-
-	bufferLen := configJSON.BufferLen
 	bgctx := context.Background()
 
-	for _, bindAddr := range configJSON.BindAddrs {
-		addr, err := net.ResolveTCPAddr("tcp", bindAddr)
+	for _, configObject := range configObjects {
+		addr, err := net.ResolveTCPAddr("tcp", configObject.BindAddr)
 		if err != nil {
-			log.Fatalf("error parsing binding address (%s, %v)", bindAddr, err)
+			log.Fatalf("error parsing binding address (%s, %v)", configObject.BindAddr, err)
 		}
 
 		ln, err := net.ListenTCP("tcp", addr)
 		if err != nil {
-			log.Fatalf("failed to ListenTCP (%s, %v)", bindAddr, err)
+			log.Fatalf("failed to ListenTCP (%s, %v)", configObject.BindAddr, err)
 		}
 
-		log.Printf("listening on %s", bindAddr)
+		log.Printf("listening on %s", configObject.BindAddr)
 
-		port := addr.Port
-		go func(ln *net.TCPListener, bindAddr string) {
+		go func(ln *net.TCPListener, configObject ConfigObject) {
 			// Create acceptor for each TCPListener
+
+			dialTimeout := time.Duration(configObject.DialTimeoutMilliSeconds) * time.Millisecond
+
+			bufferLen := configObject.BufferLen
 
 			for {
 				conn, err := ln.AcceptTCP()
 				if err != nil {
-					log.Fatalf("failed to AcceptTCP (%s, %v)", bindAddr, err)
+					log.Fatalf("failed to AcceptTCP (%s, %v)", configObject.BindAddr, err)
 				}
 
 				go func() {
@@ -140,10 +130,9 @@ func main() {
 					mutex := &sync.Mutex{}
 
 					// Get the server with lowest latency
-					for _, serverIP := range serverIPs {
-						go func(serverIP string) {
+					for _, serverAddr := range configObject.Servers {
+						go func(serverAddr string) {
 							startTime := time.Now()
-							serverAddr := serverIP + ":" + strconv.Itoa(port)
 							remoteConn, err := net.DialTimeout("tcp", serverAddr, dialTimeout)
 
 							withMutex(mutex, func() {
@@ -166,7 +155,7 @@ func main() {
 								ch <- remoteConn.(*net.TCPConn)
 								stopNewConns = true
 							})
-						}(serverIP)
+						}(serverAddr)
 					}
 
 					// Create pipeline
@@ -177,7 +166,7 @@ func main() {
 
 				}()
 			}
-		}(ln, bindAddr)
+		}(ln, configObject)
 	}
 
 	<-bgctx.Done()
