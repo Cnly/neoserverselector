@@ -13,10 +13,11 @@ import (
 
 // ConfigObject represents one config object specified in config
 type ConfigObject struct {
-	BindAddr                string
-	BufferLen               int
-	DialTimeoutMilliSeconds int64
-	Servers                 []string
+	BindAddr                           string
+	BufferLen                          int
+	DialTimeoutMilliSeconds            int64
+	MinimumAcceptedLatencyMilliseconds int64
+	Servers                            []string
 }
 
 func copyForever(ctx context.Context, cancelFunc context.CancelFunc, from, to *net.TCPConn, bufferLen int) {
@@ -151,7 +152,17 @@ func main() {
 									return
 								}
 
-								log.Printf("successfully connected to remote %s (%d ms)", serverAddr, time.Since(startTime).Nanoseconds()/1000/1000)
+								latencyMS := time.Since(startTime).Nanoseconds() / 1000 / 1000
+								if latencyMS < configObject.MinimumAcceptedLatencyMilliseconds {
+									log.Printf("discarding connection to remote %s established in %d ms", serverAddr, latencyMS)
+									err = remoteConn.Close()
+									if err != nil {
+										log.Printf("error closing remote TCPConn (addr: %s, err: %v)", remoteConn.RemoteAddr(), err)
+									}
+									return
+								}
+
+								log.Printf("successfully connected to remote %s (%d ms)", serverAddr, latencyMS)
 								ch <- remoteConn.(*net.TCPConn)
 								stopNewConns = true
 							})
