@@ -127,6 +127,7 @@ func main() {
 					// Handle new connection
 
 					ch := make(chan *net.TCPConn, 1)
+					failureChan := make(chan bool)
 					stopNewConns := false
 					mutex := &sync.Mutex{}
 
@@ -149,12 +150,14 @@ func main() {
 
 								if err != nil {
 									log.Printf("error establishing connection to remote (%s, %v)", serverAddr, err)
+									failureChan <- true
 									return
 								}
 
 								latencyMS := time.Since(startTime).Nanoseconds() / 1000 / 1000
 								if latencyMS < configObject.MinimumAcceptedLatencyMilliseconds {
 									log.Printf("discarding connection to remote %s established in %d ms", serverAddr, latencyMS)
+									failureChan <- true
 									err = remoteConn.Close()
 									if err != nil {
 										log.Printf("error closing remote TCPConn (addr: %s, err: %v)", remoteConn.RemoteAddr(), err)
@@ -163,14 +166,37 @@ func main() {
 								}
 
 								log.Printf("successfully connected to remote %s (%d ms)", serverAddr, latencyMS)
+								close(failureChan)
 								ch <- remoteConn.(*net.TCPConn)
 								stopNewConns = true
 							})
 						}(serverAddr)
 					}
 
+					// Signal to close the local connection if all connection
+					// attempts to remote servers failed
+					go func() {
+						for _ = range configObject.Servers {
+							_, open := <-failureChan
+							if !open {
+								return
+							}
+						}
+						log.Printf("error handling connection %s -> %s: all connection attempts to remote servers failed", conn.RemoteAddr(), configObject.BindAddr)
+						close(ch)
+					}()
+
 					// Create pipeline
-					remoteConn := <-ch
+					remoteConn, open := <-ch
+					if !open {
+						log.Printf("closing connection %s -> %s: no remoteConn available", conn.RemoteAddr(), configObject.BindAddr)
+						err := conn.Close()
+						if err != nil {
+							log.Printf("error closing connection %s -> %s: %v", remoteConn.RemoteAddr(), configObject.BindAddr, err)
+						}
+						return
+					}
+
 					pipeCtx, pipeCancel := context.WithCancel(bgctx)
 					go copyForever(pipeCtx, pipeCancel, conn, remoteConn, bufferLen)
 					go copyForever(pipeCtx, pipeCancel, remoteConn, conn, bufferLen)
