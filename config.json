@@ -2,7 +2,7 @@
 	{
 		"BindAddr": "127.0.0.1:5201",
 		"BufferLen": 65000,
-		"DialTimeoutMilliSeconds": 7000,
+		"DialTimeoutMilliseconds": 7000,
 		"MinimumAcceptedLatencyMilliseconds": 40,
 		"Servers": [
 			"127.0.0.1:10001",
@@ -12,7 +12,7 @@
 	{
 		"BindAddr": "127.0.0.1:5301",
 		"BufferLen": 65000,
-		"DialTimeoutMilliSeconds": 7000,
+		"DialTimeoutMilliseconds": 7000,
 		"MinimumAcceptedLatencyMilliseconds": -1,
 		"Servers": [
 			"127.0.0.1:20001",

@@ -15,7 +15,7 @@ import (
 type ConfigObject struct {
 	BindAddr                           string
 	BufferLen                          int
-	DialTimeoutMilliSeconds            int64
+	DialTimeoutMilliseconds            int64
 	MinimumAcceptedLatencyMilliseconds int64
 	Servers                            []string
 }
@@ -113,7 +113,7 @@ func main() {
 		go func(ln *net.TCPListener, configObject ConfigObject) {
 			// Create acceptor for each TCPListener
 
-			dialTimeout := time.Duration(configObject.DialTimeoutMilliSeconds) * time.Millisecond
+			dialTimeout := time.Duration(configObject.DialTimeoutMilliseconds) * time.Millisecond
 
 			bufferLen := configObject.BufferLen
 
